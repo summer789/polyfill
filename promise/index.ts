@@ -4,10 +4,11 @@
 if (!Promise) {
     type PromiseStatus = 'pending' | 'resolved' | 'rejected';
     type Resolved = (data: any) => void;
-    type rejected = (data: Error) => void;
+    type Rejected = (data: Error) => void;
     type thenCallBack = (data: any) => any;
     type catchCallBack = (data: Error) => any;
-    type Executor = (resolved: Resolved, rejected: rejected) => void;
+    type Executor = (resolved: Resolved, rejected: Rejected) => void;
+    type PesolvePromise = (promise2: Promise, x: any, resolve: Resolved, reject: Rejected) => void;
     /**
      * @
      * @class Promise
@@ -29,6 +30,7 @@ if (!Promise) {
          */
         constructor(executor: Executor) {
             // 在状态变更时调用对应的注册号的回调函数
+            this.then = this.then.bind(this);
             const resolve = (data: any) => {
                 if (this.status === 'pending') {
                     this.status = 'resolved';
@@ -51,23 +53,86 @@ if (!Promise) {
         }
 
 
-        then = (onResolved: any, onRejected: any) => {
+        then(onResolved?: any, onRejected?: any) {
             // 规矩规范，如果传入的值不是函数，则忽略
             onResolved = typeof onResolved === 'function' ? onResolved : data => data;
             onResolved = typeof onRejected === 'function' ? onRejected : data => { throw data };
-            if (this.status === 'resolved') {
-                return new Promise((onResolved, onRejected) => {
-                    try {
+
+            const promise2 = new Promise((onResolved, onRejected) => {
+
+                try {
+                    if (this.status === 'resolved') {
                         const res: any = onResolved(this.data);
-                        // 判断返回的是否是promise
-                        if (res in Promise) {
-                            res.then(onResolved, onRejected)
-                        }
-                    } catch (error) {
-                        onRejected(error);
+                        resolvePromise(promise2, res, onResolved, onRejected);
                     }
-                })
+
+                    if (this.status === 'rejected') {
+                        let x = onRejected(this.data);
+                        resolvePromise(promise2, x, onResolved, onRejected);
+                    }
+
+                    // 当状态还是pending时，将回调推入到回调队列中，后续调用
+
+                    if (this.status === 'pending') {
+                        this.onResolvedCallBackList.push((data) => {
+                            const res: any = onResolved(data);
+                            resolvePromise(promise2, res, onResolved, onRejected);
+                        });
+
+                        this.onRejectedCallBackList.push((err) => {
+                            let x = onRejected(err);
+                            resolvePromise(promise2, x, onResolved, onRejected);
+                        })
+                    }
+
+                } catch (error) {
+                    onRejected(error);
+                }
+            })
+
+        }
+    }
+
+    function resolvePromise(promise2: Promise, x: Promise | any, resolve: Resolved, reject: Rejected): void {
+
+        // 如何是循环引用，会导致一直无法接受，报错处理
+        if (promise2 === x) {
+            reject(new TypeError('promise循环引用'));
+            return;
+        }
+        // 检测是否已经调用过了，防止多次调用；
+        let isCall: boolean = false;
+        if (x !== null && (typeof x === 'object' || typeof x === 'function')) {
+            try {
+                // 如果then是函数，则认为x是一个Promise
+                if (typeof (x as Promise).then === 'function') {
+                    // 执行then方法
+                    (x as Promise).then(y => {
+                        if (isCall) {
+                            return;
+                        }
+                        isCall = true;
+                        // 递归调用判断
+                        resolvePromise(promise2, y, resolve, reject);
+                    }, err => {
+                        if (isCall) {
+                            return;
+                        }
+                        isCall = true;
+                        reject(err);
+                    });
+                } else {
+                    resolve(x);
+                }
+            } catch (error) {
+                if (isCall) {
+                    return;
+                }
+                isCall = true;
+                reject(error);
             }
+        } else {
+            resolve(x);
         }
     }
 }
