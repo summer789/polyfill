@@ -23,6 +23,40 @@ if (!Promise) {
         // rejected 回调函数列表
         private onRejectedCallBackList: catchCallBack[];
 
+        static resolve = (data: any) => {
+            return new Promise((resolve) => {
+                resolve(data);
+            })
+        }
+
+        static reject = (data: any) => {
+            return new Promise((resolve, reject) => {
+                reject(data);
+            })
+        }
+
+        static race = (promises: Promise[]) => {
+            return new Promise((resolve, reject) => {
+                promises.forEach(promise => {
+                    promise.then(resolve, reject);
+                });
+            })
+        }
+
+        static all = (promises: Promise[]) => {
+            let arr: any[] = [];
+            return new Promise((resolve, reject) => {
+                promises.forEach((promise: Promise, index) => {
+                    promise.then((data: any) => {
+                        arr[index] = data;
+                        if (index === promises.length - 1) {
+                            resolve(arr);
+                        }
+                    })
+                })
+            })
+        }
+
         /**
          *Creates an instance of Promise.
          * @param {Executor} executor 创建promise时传入的立即执行函数
@@ -54,34 +88,62 @@ if (!Promise) {
 
 
         then(onResolved?: any, onRejected?: any) {
-            // 规矩规范，如果传入的值不是函数，则忽略
+            // 规范，如果传入的值不是函数，则忽略
             onResolved = typeof onResolved === 'function' ? onResolved : data => data;
-            onResolved = typeof onRejected === 'function' ? onRejected : data => { throw data };
+            onRejected = typeof onRejected === 'function' ? onRejected : err => { throw err };
 
             const promise2 = new Promise((onResolved, onRejected) => {
 
                 try {
                     if (this.status === 'resolved') {
-                        const res: any = onResolved(this.data);
-                        resolvePromise(promise2, res, onResolved, onRejected);
+                        // 实现异步调用
+                        setTimeout(() => {
+                            try {
+                                const res: any = onResolved(this.data);
+                                resolvePromise(promise2, res, onResolved, onRejected);
+                            } catch (error) {
+                                onRejected(error);
+                            }
+                        })
+
                     }
 
                     if (this.status === 'rejected') {
-                        let x = onRejected(this.data);
-                        resolvePromise(promise2, x, onResolved, onRejected);
+                        //实现异步调用
+                        setTimeout(() => {
+                            try {
+                                let x = onRejected(this.data);
+                                resolvePromise(promise2, x, onResolved, onRejected);
+                            } catch (error) {
+                                onRejected(error);
+                            }
+                        })
                     }
 
                     // 当状态还是pending时，将回调推入到回调队列中，后续调用
 
                     if (this.status === 'pending') {
                         this.onResolvedCallBackList.push((data) => {
-                            const res: any = onResolved(data);
-                            resolvePromise(promise2, res, onResolved, onRejected);
+                            setTimeout(() => {
+                                try {
+                                    const res: any = onResolved(data);
+                                    resolvePromise(promise2, res, onResolved, onRejected);
+                                } catch (error) {
+                                    onRejected(error);
+                                }
+                            })
+
                         });
 
                         this.onRejectedCallBackList.push((err) => {
-                            let x = onRejected(err);
-                            resolvePromise(promise2, x, onResolved, onRejected);
+                            setTimeout(() => {
+                                try {
+                                    let x = onRejected(err);
+                                    resolvePromise(promise2, x, onResolved, onRejected);
+                                } catch (error) {
+                                    onRejected(error);
+                                }
+                            })
                         })
                     }
 
@@ -89,8 +151,13 @@ if (!Promise) {
                     onRejected(error);
                 }
             })
-
+            return promise2;
         }
+
+        catch(fn) {
+            return this.then(null, fn);
+        }
+
     }
 
     function resolvePromise(promise2: Promise, x: Promise | any, resolve: Resolved, reject: Rejected): void {
