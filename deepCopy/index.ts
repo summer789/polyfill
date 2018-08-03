@@ -39,3 +39,5 @@ function deepCopy() {
         return copy;
     }
 }
+
+export default deepCopy();
