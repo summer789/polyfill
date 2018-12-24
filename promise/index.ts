@@ -14,7 +14,7 @@ if (!Promise) {
      * @class Promise
      */
     class Promise {
-        // promose状态
+        // promise状态
         private status: PromiseStatus = 'pending';
         // resolved 时获取到的数据
         private data: any = undefined;
@@ -65,19 +65,29 @@ if (!Promise) {
         constructor(executor: Executor) {
             // 在状态变更时调用对应的注册号的回调函数
             this.then = this.then.bind(this);
-            const resolve = (data: any) => {
-                if (this.status === 'pending') {
-                    this.status = 'resolved';
-                    this.data = data;
-                    this.onResolvedCallBackList.forEach(fn => fn(data))
+            const self = this;
+            function resolve(data: any) {
+                if (data instanceof Promise) {
+                    return data.then(resolve, reject);
                 }
+                setTimeout(() => {
+                    if (self.status === 'pending') {
+                        self.status = 'resolved';
+                        self.data = data;
+                        self.onResolvedCallBackList.forEach(fn => fn(data))
+                    }
+                }, 0)
+
             }
-            const reject = (data: Error) => {
-                if (this.status === 'pending') {
-                    this.status = 'rejected';
-                    this.data = data;
-                    this.onRejectedCallBackList.forEach(fn => fn(data))
-                }
+            function reject(data: Error) {
+                setTimeout(() => {
+                    if (self.status === 'pending') {
+                        self.status = 'rejected';
+                        self.data = data;
+                        self.onRejectedCallBackList.forEach(fn => fn(data))
+                    }
+                }, 0)
+
             }
             try {
                 executor(resolve, reject);
@@ -124,26 +134,21 @@ if (!Promise) {
 
                     if (this.status === 'pending') {
                         this.onResolvedCallBackList.push((data) => {
-                            setTimeout(() => {
-                                try {
-                                    const res: any = onResolved(data);
-                                    resolvePromise(promise2, res, onResolved, onRejected);
-                                } catch (error) {
-                                    onRejected(error);
-                                }
-                            })
-
+                            try {
+                                const res: any = onResolved(data);
+                                resolvePromise(promise2, res, onResolved, onRejected);
+                            } catch (error) {
+                                onRejected(error);
+                            }
                         });
 
                         this.onRejectedCallBackList.push((err) => {
-                            setTimeout(() => {
-                                try {
-                                    let x = onRejected(err);
-                                    resolvePromise(promise2, x, onResolved, onRejected);
-                                } catch (error) {
-                                    onRejected(error);
-                                }
-                            })
+                            try {
+                                let x = onRejected(err);
+                                resolvePromise(promise2, x, onResolved, onRejected);
+                            } catch (error) {
+                                onRejected(error);
+                            }
                         })
                     }
 
